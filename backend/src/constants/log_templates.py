@@ -7,6 +7,7 @@ ACTIONS: dict[str, str] = {
     "metric.update": "修改指标",
     "formula.parse": "解析口径 DSL",
     "formula.save": "保存口径版本",
+    "metric.merge": "合并同名口径",
     "run.create": "发起校验运行",
     "run.complete": "校验运行完成",
     "change.create": "提交变更单",

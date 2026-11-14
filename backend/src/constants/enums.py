@@ -49,12 +49,14 @@ class MetricStatus(StrEnum):
     DRAFT = "draft"
     ACTIVE = "active"
     DEPRECATED = "deprecated"
+    MERGED = "merged"
 
 
 METRIC_STATUS_LABELS: dict[str, str] = {
     MetricStatus.DRAFT.value: "草稿",
     MetricStatus.ACTIVE.value: "生效中",
     MetricStatus.DEPRECATED.value: "已下线",
+    MetricStatus.MERGED.value: "已合并",
 }
 
 

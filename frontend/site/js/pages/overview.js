@@ -19,9 +19,9 @@ export const overviewPage = {
         data.worker_alive ? '在岗' : '心跳超时'
       }</div>
       ${statStrip([
-        { label: 'M · 指标登记', value: data.metrics_total, hint: '48 条口径卡片' },
+        { label: 'M · 指标登记', value: data.metrics_total, hint: `生效 ${data.metrics_effective ?? data.metrics_total} 条 · 已合并 ${data.merged_metrics ?? 0} 条` },
         { label: 'R · 报表引用', value: data.reports_total, hint: `核心报表 ${data.core_reports} 张（权重 ×3）` },
-        { label: 'C · 同名冲突', value: data.conflicts_total, hint: '同名但字段/过滤/聚合不同' },
+        { label: 'C · 同名冲突', value: data.conflicts_total, hint: `同名但字段/过滤/聚合不同 · 合并 ${data.merge_count ?? 0} 次` },
         { label: 'L · 依赖环', value: data.cycles_total, hint: data.cycle_paths[0] ? 'SCC 检出' : '暂无环' },
         { label: 'H · 高风险', value: data.high_risk, hint: '影响面 ≥ 核心报表级' },
         { label: 'A · 待审批', value: data.pending_changes, hint: '变更单等管理员批准' },

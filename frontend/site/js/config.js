@@ -34,13 +34,13 @@ export const PERMISSIONS = {
   admin: [
     'overview:read', 'metric:read', 'metric:write', 'formula:write',
     'dependency:read', 'report:read', 'conflict:read',
-    'run:read', 'run:create', 'change:read', 'change:write', 'change:approve',
+    'run:read', 'run:create', 'change:read', 'change:write', 'change:approve', 'merge:write',
     'export:read', 'audit:read',
   ],
   analyst: [
     'overview:read', 'metric:read', 'formula:write',
     'dependency:read', 'report:read', 'conflict:read',
-    'run:read', 'run:create', 'change:read', 'change:write', 'export:read',
+    'run:read', 'run:create', 'change:read', 'change:write', 'merge:write', 'export:read',
   ],
   viewer: [
     'overview:read', 'metric:read', 'dependency:read', 'report:read', 'conflict:read',
@@ -62,9 +62,10 @@ export const ENUMS = {
     formula: '公式改写',
   },
   changeStatus: { pending: '待审批', approved: '已批准', rejected: '已驳回' },
+  mergeStatus: { completed: '已合并' },
   metricDomain: { trade: '交易', traffic: '流量', member: '会员', goods: '商品', finance: '财务' },
   metricTier: { core: '核心', normal: '普通' },
-  metricStatus: { draft: '草稿', active: '生效中', deprecated: '已下线' },
+  metricStatus: { draft: '草稿', active: '生效中', deprecated: '已下线', merged: '已合并' },
   parseStatus: { ok: '解析通过', error: '解析失败' },
   dependencyKind: { metric: '指标引用', field: '字段依赖', report: '报表引用' },
   trigger: { manual: '手动', schedule: '定时', seed: '初始化' },

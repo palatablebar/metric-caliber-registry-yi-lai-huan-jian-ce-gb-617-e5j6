@@ -14,8 +14,10 @@ from src.constants.enums import (
     RUN_STATUS_LABELS,
     SEVERITY_LABELS,
     ChangeStatus,
+    MetricStatus,
 )
 from src.models.change_request import ChangeRequest
+from src.models.merge import MetricMerge
 from src.models.metric import Metric
 from src.models.report import Report
 from src.models.run import Run
@@ -38,6 +40,15 @@ def worker_alive() -> bool:
 
 def overview(db: Session) -> dict:
     summary = graph_service.summary(db)
+    active_filter = Metric.status != MetricStatus.MERGED.value
+    metrics_effective = db.scalar(select(func.count()).select_from(Metric).where(active_filter)) or 0
+    merged_metrics = (
+        db.scalar(
+            select(func.count()).select_from(Metric).where(Metric.status == MetricStatus.MERGED.value)
+        )
+        or 0
+    )
+    merge_count = db.scalar(select(func.count()).select_from(MetricMerge)) or 0
     metrics_total = db.scalar(select(func.count()).select_from(Metric)) or 0
     reports_total = db.scalar(select(func.count()).select_from(Report)) or 0
     core_reports = db.scalar(select(func.count()).select_from(Report).where(Report.is_core.is_(True))) or 0
@@ -48,7 +59,10 @@ def overview(db: Session) -> dict:
         or 0
     )
     domain_rows = db.execute(
-        select(Metric.domain, func.count()).group_by(Metric.domain).order_by(Metric.domain)
+        select(Metric.domain, func.count())
+        .where(active_filter)
+        .group_by(Metric.domain)
+        .order_by(Metric.domain)
     ).all()
     kind_counter: dict[str, int] = {}
     for item in summary["conflicts"]:
@@ -72,6 +86,9 @@ def overview(db: Session) -> dict:
     severity_counter = summary["severity"]
     return {
         "metrics_total": metrics_total,
+        "metrics_effective": metrics_effective,
+        "merged_metrics": merged_metrics,
+        "merge_count": merge_count,
         "reports_total": reports_total,
         "core_reports": core_reports,
         "conflicts_total": summary["conflicts_total"],

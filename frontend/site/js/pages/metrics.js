@@ -50,7 +50,14 @@ function openDetail(view, ctx, item) {
             </div>
           </div>
           ${
-            editable
+            metric.status === 'merged'
+              ? `<div class="dsl-box"><span class="label">合并留档</span>
+                  <p class="section-note">这份口径已并入 <span class="mono">${esc(metric.merged_into || '—')}</span>，历史版本、依赖来源与报表引用完整保留，不再参与冲突检测与依赖图计算。</p>
+                </div>`
+              : ''
+          }
+          ${
+            editable && metric.status === 'active'
               ? `<div class="dsl-box" id="dsl-editor">
                   <span class="label">改口径 → 先解析，再决定是否保存新版本</span>
                   ${field({ label: 'DSL 文本', name: 'dsl_text', value: metric.dsl_text })}
@@ -60,11 +67,13 @@ function openDetail(view, ctx, item) {
                   </div>
                   <div id="parse-result"></div>
                 </div>`
-              : '<p class="muted tiny">只读角色可以查看口径与解析结果，不能改口径。</p>'
+              : metric.status === 'merged'
+                ? ''
+                : '<p class="muted tiny">只读角色可以查看口径与解析结果，不能改口径。</p>'
           }`,
       });
 
-      if (!editable) return;
+      if (!editable || metric.status !== 'active') return;
       const input = root.querySelector('[name=dsl_text]');
       const resultBox = root.querySelector('#parse-result');
       const renderParse = (parsed) => {

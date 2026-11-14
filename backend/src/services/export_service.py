@@ -9,6 +9,7 @@ from src.constants.enums import (
     CHANGE_STATUS_LABELS,
     CONFLICT_KIND_LABELS,
     METRIC_DOMAIN_LABELS,
+    METRIC_STATUS_LABELS,
     METRIC_TIER_LABELS,
     RUN_STATUS_LABELS,
     SEVERITY_LABELS,
@@ -17,7 +18,7 @@ from src.constants.enums import (
 from src.models.change_request import ChangeRequest
 from src.models.metric import Metric
 from src.models.run import Run
-from src.services import formula_service, graph_service, report_service
+from src.services import formula_service, graph_service, metric_service, report_service
 from src.utils.csv_export import to_csv
 
 
@@ -27,8 +28,9 @@ def metrics_csv(db: Session) -> bytes:
     reports_index = report_service.reports_by_metric(db)
     headers = [
         "指标编码", "指标名称", "业务域", "分级", "单位", "负责人", "当前版本",
-        "解析状态", "解析错误", "表达式", "字段", "过滤条件", "依赖指标", "下游报表", "报表数", "状态",
+        "解析状态", "解析错误", "表达式", "字段", "过滤条件", "依赖指标", "下游报表", "报表数", "状态", "合并到",
     ]
+    merged_into = metric_service.merged_into_map(db, [metric.code for metric in metrics])
     rows = []
     for metric in metrics:
         formula = latest.get(metric.id)
@@ -51,7 +53,8 @@ def metrics_csv(db: Session) -> bytes:
                 " | ".join(parsed.get("deps") or []),
                 " | ".join(report["name"] for report in reports),
                 len(reports),
-                metric.status,
+                METRIC_STATUS_LABELS.get(metric.status, metric.status),
+                merged_into.get(metric.code, ""),
             ]
         )
     return to_csv(headers, rows)

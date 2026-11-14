@@ -120,3 +120,24 @@ CREATE TABLE audit_logs (
     seed_key        VARCHAR(120) UNIQUE,
     created_at      TIMESTAMP    NOT NULL
 );
+
+-- 同名口径合并归档（一次合并 = 一条记录；merge_key 为幂等自然键）
+CREATE TABLE metric_merges (
+    id                  SERIAL PRIMARY KEY,
+    merge_key           VARCHAR(160) NOT NULL UNIQUE,  -- merge:<保留编码>:<排序后的被合并编码>
+    survivor_metric_id  INTEGER      REFERENCES metrics(id) ON DELETE SET NULL,
+    source_metric_id    INTEGER      REFERENCES metrics(id) ON DELETE SET NULL,
+    survivor_code       VARCHAR(48)  NOT NULL,
+    source_code         VARCHAR(48)  NOT NULL,         -- 多个被合并编码用 " / " 连接
+    survivor_name       VARCHAR(80)  NOT NULL,
+    source_name         VARCHAR(80)  NOT NULL,
+    status              VARCHAR(16)  NOT NULL,         -- completed
+    note                TEXT,
+    summary             JSON         NOT NULL,         -- 迁移报表/引用/影响分快照
+    archived            JSON         NOT NULL,         -- 被合并指标全部版本、依赖边、报表引用
+    requested_by        VARCHAR(160) NOT NULL,
+    created_at          TIMESTAMP    NOT NULL
+);
+CREATE INDEX ix_metric_merges_merge_key ON metric_merges (merge_key);
+CREATE INDEX ix_metric_merges_survivor_code ON metric_merges (survivor_code);
+CREATE INDEX ix_metric_merges_source_code ON metric_merges (source_code);

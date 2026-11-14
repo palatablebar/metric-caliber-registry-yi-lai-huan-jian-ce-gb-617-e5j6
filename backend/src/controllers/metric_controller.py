@@ -22,11 +22,13 @@ def detail(db: Session, metric_id: int) -> dict:
     metric = metric_service.get_metric(db, metric_id)
     formula = formula_service.latest_for(db, metric)
     reports = report_service.reports_by_metric(db).get(metric.code, [])
+    merged_into = metric_service.merged_into_of(db, metric.code)
     return {
         "metric": metric_service.serialize(
             metric, formula,
             report_names=[report["name"] for report in reports],
             dep_codes=[dep for dep in ((formula.parsed or {}).get("deps") or [])] if formula else [],
+            merged_into=merged_into,
         ),
         "history": [
             formula_service.serialize(row)

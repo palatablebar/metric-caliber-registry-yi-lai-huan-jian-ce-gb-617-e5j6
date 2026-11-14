@@ -4,7 +4,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.constants.enums import METRIC_DOMAIN_LABELS
+from src.constants.enums import METRIC_DOMAIN_LABELS, MetricStatus
 from src.models.metric import Metric
 from src.services import formula_service, graph_analysis, report_service
 from src.utils.errors import AppError
@@ -16,6 +16,9 @@ def collect_inputs(db: Session) -> tuple[list[dict], dict[str, list[dict]], dict
     reports_index = report_service.reports_by_metric(db)
     payloads: list[dict] = []
     for metric in metrics:
+        # 已合并的历史口径只留在归档与指标目录里，不再参与依赖图/冲突/影响面
+        if metric.status == MetricStatus.MERGED.value:
+            continue
         formula = latest.get(metric.id)
         parsed = (formula.parsed or {}) if formula else {}
         parse_status = formula.parse_status if formula else "error"

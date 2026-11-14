@@ -13,8 +13,8 @@ ROLE_LABELS: dict[str, str] = {
 }
 
 ROLE_DUTIES: dict[str, str] = {
-    Role.ADMIN.value: "注册指标、批准口径变更、导出与审计",
-    Role.ANALYST.value: "提交口径变更、跑校验运行、看影响面",
+    Role.ADMIN.value: "注册指标、批准口径变更、合并同名口径、导出与审计",
+    Role.ANALYST.value: "提交口径变更、合并同名口径、跑校验运行、看影响面",
     Role.VIEWER.value: "只读查看指标口径、冲突与依赖图",
 }
 
@@ -24,7 +24,7 @@ PERMISSIONS: dict[str, set[str]] = {
         "formula:write",
         "dependency:read", "report:read", "conflict:read",
         "run:read", "run:create",
-        "change:read", "change:write", "change:approve",
+        "change:read", "change:write", "change:approve", "merge:write",
         "export:read", "audit:read", "overview:read",
     },
     Role.ANALYST.value: {
@@ -32,7 +32,7 @@ PERMISSIONS: dict[str, set[str]] = {
         "formula:write",
         "dependency:read", "report:read", "conflict:read",
         "run:read", "run:create",
-        "change:read", "change:write",
+        "change:read", "change:write", "merge:write",
         "export:read", "overview:read",
     },
     Role.VIEWER.value: {
@@ -46,6 +46,7 @@ FORMULA_WRITE_ROLES = (Role.ADMIN.value, Role.ANALYST.value)
 RUN_CREATE_ROLES = (Role.ADMIN.value, Role.ANALYST.value)
 CHANGE_WRITE_ROLES = (Role.ADMIN.value, Role.ANALYST.value)
 CHANGE_APPROVE_ROLES = (Role.ADMIN.value,)
+MERGE_ROLES = (Role.ADMIN.value, Role.ANALYST.value)
 EXPORT_ROLES = (Role.ADMIN.value, Role.ANALYST.value)
 AUDIT_ROLES = (Role.ADMIN.value,)
 READ_ROLES = (Role.ADMIN.value, Role.ANALYST.value, Role.VIEWER.value)

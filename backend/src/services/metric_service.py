@@ -23,6 +23,7 @@ def serialize(
     *,
     report_names: list[str] | None = None,
     dep_codes: list[str] | None = None,
+    merged_into: str | None = None,
 ) -> dict:
     parsed = (formula.parsed or {}) if formula else {}
     return {
@@ -39,6 +40,7 @@ def serialize(
         "status": metric.status,
         "status_label": METRIC_STATUS_LABELS.get(metric.status, metric.status),
         "current_version": metric.current_version,
+        "merged_into": merged_into,
         "parse_status": formula.parse_status if formula else "error",
         "parse_error": formula.parse_error if formula else "缺少口径公式",
         "signature": formula.signature if formula else "",
@@ -66,6 +68,7 @@ def list_metrics(
     domain: str | None = None,
     tier: str | None = None,
     status: str | None = None,
+    include_merged: bool = False,
     limit: int = 20,
     offset: int = 0,
     formulas: dict[int, Formula] | None = None,
@@ -75,6 +78,10 @@ def list_metrics(
     reports_index = reports_index or {}
     stmt = select(Metric)
     count_stmt = select(func.count()).select_from(Metric)
+    if not include_merged and not status:
+        # 默认只看生效口径；明确按状态筛选（含 merged）时按筛选结果返回
+        stmt = stmt.where(Metric.status != MetricStatus.MERGED.value)
+        count_stmt = count_stmt.where(Metric.status != MetricStatus.MERGED.value)
     if q:
         like = f"%{q.strip()}%"
         stmt = stmt.where(Metric.name.ilike(like) | Metric.code.ilike(like))
@@ -91,12 +98,14 @@ def list_metrics(
     total = db.scalar(count_stmt) or 0
     rows = db.scalars(stmt.order_by(Metric.code).limit(limit).offset(offset)).all()
     dep_codes = _dep_codes(db, [metric.id for metric in rows])
+    merge_map = merged_into_map(db, [row.code for row in rows if row.status == MetricStatus.MERGED.value])
     items = [
         serialize(
             row,
             formulas.get(row.id),
             report_names=[report["name"] for report in reports_index.get(row.code, [])],
             dep_codes=dep_codes.get(row.id, []),
+            merged_into=merge_map.get(row.code),
         )
         for row in rows
     ]
@@ -113,6 +122,26 @@ def _dep_codes(db: Session, metric_ids: list[int]) -> dict[int, list[str]]:
     ).all():
         result.setdefault(edge.from_metric_id, []).append(names.get(edge.to_metric_id or -1, edge.to_ref))
     return {key: sorted(value) for key, value in result.items()}
+
+
+def merged_into_of(db: Session, code: str) -> str | None:
+    """已合并指标 -> 保留口径编码（从归档记录里查，不删历史行）。"""
+    return merged_into_map(db, [code]).get(code)
+
+
+def merged_into_map(db: Session, codes: list[str]) -> dict[str, str]:
+    if not codes:
+        return {}
+    from src.models.merge import MetricMerge  # noqa: WPS433 - 避免循环导入
+
+    wanted = set(codes)
+    result: dict[str, str] = {}
+    for merge in db.scalars(select(MetricMerge).order_by(MetricMerge.id)).all():
+        for code in (merge.source_code or "").split(" / "):
+            code = code.strip()
+            if code in wanted:
+                result.setdefault(code, merge.survivor_code)
+    return result
 
 
 def get_metric(db: Session, metric_id: int) -> Metric:

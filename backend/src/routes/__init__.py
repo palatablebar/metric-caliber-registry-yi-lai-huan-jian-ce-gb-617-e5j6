@@ -8,6 +8,7 @@ from src.routes.conflicts import router as conflicts_router
 from src.routes.dependencies import router as dependencies_router
 from src.routes.exports import router as exports_router
 from src.routes.health import router as health_router
+from src.routes.merges import router as merges_router
 from src.routes.metrics import router as metrics_router
 from src.routes.overview import router as overview_router
 from src.routes.reports import router as reports_router
@@ -21,6 +22,7 @@ api_router.include_router(metrics_router)
 api_router.include_router(dependencies_router)
 api_router.include_router(reports_router)
 api_router.include_router(conflicts_router)
+api_router.include_router(merges_router)
 api_router.include_router(change_requests_router)
 api_router.include_router(runs_router)
 api_router.include_router(exports_router)

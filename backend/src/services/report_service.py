@@ -64,5 +64,24 @@ def reports_by_metric(db: Session) -> dict[str, list[dict]]:
     return index
 
 
+def report_payloads(db: Session) -> list[dict]:
+    """合并规划用的完整报表清单（含引用的指标编码，供引用迁移与去重）。"""
+    payloads: list[dict] = []
+    for report in db.scalars(select(Report).order_by(Report.code)).all():
+        weight = report.weight or (REPORT_WEIGHT_CORE if report.is_core else REPORT_WEIGHT_NORMAL)
+        payloads.append(
+            {
+                "code": report.code,
+                "name": report.name,
+                "owner": report.owner,
+                "channel": report.channel,
+                "is_core": bool(report.is_core),
+                "weight": int(weight),
+                "metric_codes": list(report.metric_codes or []),
+            }
+        )
+    return payloads
+
+
 def count_reports(db: Session) -> int:
     return db.scalar(select(func.count()).select_from(Report)) or 0

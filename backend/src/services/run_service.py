@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.config.settings import settings
+from src.constants.enums import MetricStatus
 from src.models.formula import Formula
 from src.models.metric import Metric
 from src.models.run import Run
@@ -38,7 +39,9 @@ def next_run_no(db: Session) -> str:
 def execute_run(db: Session, run: Run) -> Run:
     run.status = "running"
     try:
-        metrics = db.scalars(select(Metric).order_by(Metric.code)).all()
+        all_metrics = db.scalars(select(Metric).order_by(Metric.code)).all()
+        # 已合并的旧口径不再参与校验；它的版本与依赖已归档在 metric_merges
+        metrics = [metric for metric in all_metrics if metric.status != MetricStatus.MERGED.value]
         latest = formula_service.latest_map(db)
         parsed_by_code: dict[str, dict] = {}
         for metric in metrics:

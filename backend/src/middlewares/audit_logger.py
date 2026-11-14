@@ -17,7 +17,13 @@ class AuditMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         try:
             path = request.url.path
-            if request.method in MUTATING and path not in SKIP_PATHS and response.status_code < 500:
+            replay = response.headers.get("X-Idempotent-Replay") == "1"
+            if (
+                request.method in MUTATING
+                and path not in SKIP_PATHS
+                and response.status_code < 500
+                and not replay
+            ):
                 email, role = "anonymous", "anonymous"
                 header = request.headers.get("authorization", "")
                 if header.lower().startswith("bearer "):

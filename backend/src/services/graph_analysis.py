@@ -41,6 +41,11 @@ def _downstream_reports(codes: list[str], reports_by_metric: dict[str, list[dict
     return [found[key] for key in sorted(found)]
 
 
+def downstream_reports(codes: list[str], reports_by_metric: dict[str, list[dict]]) -> list[dict]:
+    """下游报表按报表 code 去重（核心报表 ×3 权重由调用方按 report.weight 求和）。"""
+    return _downstream_reports(codes, reports_by_metric)
+
+
 def impact_score(reports: list[dict]) -> int:
     return sum(_report_weight(report) for report in reports)
 
@@ -112,7 +117,7 @@ def tarjan_scc(dep_map: dict[str, list[str]]) -> list[list[str]]:
     return sorted(result)
 
 
-def _shortest_cycle(start: str, dep_map: dict[str, list[str]], component: set[str]) -> list[str]:
+def shortest_cycle(start: str, dep_map: dict[str, list[str]], component: set[str]) -> list[str]:
     """在 SCC 内找从 start 回到 start 的最短环（等长时取字典序最小）。"""
     best: list[str] | None = None
     queue: deque[tuple[str, list[str]]] = deque([(start, [start])])
@@ -144,7 +149,7 @@ def find_cycles(metrics: list[dict], reports_by_metric: dict[str, list[dict]]) -
             continue
         members = set(component)
         start = min(component)
-        path = _shortest_cycle(start, dep_map, members)
+        path = shortest_cycle(start, dep_map, members)
         reports = _downstream_reports(sorted(members), reports_by_metric)
         impact = impact_payload(reports)
         cycles.append(

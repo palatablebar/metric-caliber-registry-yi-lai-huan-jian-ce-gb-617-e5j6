@@ -25,14 +25,14 @@
 
 | 角色 | 账号 | 权限 | 典型动作 |
 |---|---|---|---|
-| 指标管理员 `admin` | `admin@metricreg.io` | 指标写 + 口径写 + 批准变更 + 导出 + 审计 | 注册指标、批准变更单、导出、看审计 |
-| 指标专员 `analyst` | `analyst@metricreg.io` | 口径写 + 跑校验 + 提交变更 + 导出 | 改口径、跑校验、提变更单、看影响面 |
-| 报表只读 `viewer` | `viewer@metricreg.io` | 只读 | 看指标、依赖图、冲突、变更单 |
+| 指标管理员 `admin` | `admin@metricreg.io` | 指标写 + 口径写 + 批准变更 + 合并口径 + 导出 + 审计 | 注册指标、批准变更单、合并同名口径、导出、看审计 |
+| 指标专员 `analyst` | `analyst@metricreg.io` | 口径写 + 跑校验 + 提交变更 + 合并口径 + 导出 | 改口径、跑校验、提变更单、看影响面、合并同名口径 |
+| 报表只读 `viewer` | `viewer@metricreg.io` | 只读 | 看指标、依赖图、冲突、变更单、合并归档 |
 
 密码统一 `Demo@2026`。低权角色调用高权接口返回**真实 403**（不是前端隐藏）：
-`viewer` 写指标 403、导出 403、审计 403；`analyst` 批准变更 403、审计 403。无 token 401，非法参数 422，重复编码 409。
+`viewer` 写指标 403、导出 403、审计 403、合并口径 403；`analyst` 批准变更 403、审计 403。无 token 401，非法参数 422，重复编码 409。
 
-## 3. 业务模块（6 个）
+## 3. 业务模块（6 个 + 口径合并扩展）
 
 | # | 模块 | 页面 | 后端 services + controller | 主要 API |
 |---|---|---|---|---|
@@ -41,11 +41,12 @@
 | ③ | 依赖图与环检测（算法 B） | 依赖图 | `graph_analysis` + `graph_service` + `dependency_service` + `dependency_controller` | `GET /api/graph`、`GET /api/cycles`、`GET /api/dependencies` |
 | ④ | 口径冲突与影响面（算法 B） | 冲突与影响面 | `graph_analysis` + `graph_service` + `conflict_controller` | `GET /api/conflicts`、`GET /api/conflicts/{id}`、`GET /api/impact` |
 | ⑤ | 变更单与审批 | 变更单与导出 | `change_service` + `change_controller` | `GET/POST /api/change-requests`、`PATCH /api/change-requests/{id}` |
+| ⑤.5 | 同名口径合并与归档 | 冲突与影响面（冲突抽屉）/ 合并归档面板 | `merge_plan` + `merge_service` + `merge_controller` | `POST /api/merges/preview`、`GET/POST /api/merges`、`GET /api/merges/{id}` |
 | ⑥ | 报表登记与导出 | 变更单与导出（导出卡片）/ 冲突页导出按钮 | `report_service` + `export_service` + `export_controller` | `GET /api/reports`、`GET /api/exports/{metrics,conflicts,change-requests,runs}.csv` |
 
 横切能力（不计入业务模块）：登录（JWT）、审计、限流、worker 心跳、总览。
 
-## 4. 五个领域实体
+## 4. 六个领域实体
 
 | 实体 | 表 | model | schema | service | controller / route | 前端 |
 |---|---|---|---|---|---|---|
@@ -54,10 +55,11 @@
 | `Dependency` 依赖边 | `dependencies` | `models/dependency.py` | 只读出参（dict） | `dependency_service` | `dependency_controller` / `routes/dependencies.py` | `pages/graph.js` |
 | `Report` 报表 | `reports` | `models/report.py` | 只读出参（dict） | `report_service` | `report_controller` / `routes/reports.py` | `pages/graph.js` / `pages/conflicts.js` |
 | `ChangeRequest` 变更单 | `change_requests` | `models/change_request.py` | `schemas/change.py` | `change_service` | `change_controller` / `routes/change_requests.py` | `pages/changes.js` |
+| `MetricMerge` 合并归档 | `metric_merges` | `models/merge.py` | `schemas/merge.py` | `merge_service` + `merge_plan` | `merge_controller` / `routes/merges.py` | `pages/conflicts.js` |
 
-横切表：`users`、`audit_logs`、`runs`（校验运行）。
+横切表：`users`、`audit_logs`、`runs`（校验运行）。合并归档表 `metric_merges` 属于 `MetricMerge` 实体（见下）。
 
-## 5. 两个算法（Python 真算，结果进页面与导出）
+## 5. 算法 A / B 与口径合并（Python 真算，结果进页面与导出）
 
 ### 算法 A｜指标 DSL 解析（`backend/src/services/dsl_parser.py`）
 
@@ -75,16 +77,38 @@ UNBALANCED_PAREN / SELF_REFERENCE / NO_FIELD`。
 - **冲突**：同名指标（`name` 相同）但签名不同 → `filter_diff / field_diff / agg_diff / dep_diff`；
 - **影响面** = 下游报表按权重求和（核心报表 ×3），`score >= 8` high、`>= 3` medium、否则 low；
 - 字段影响面：`impact_of_field('dwd.order.amount')` → 3 个指标 / 5 张报表 / 11 分 / high（验收数字）。
+- 已合并口径（`metrics.status = merged`）退出图与冲突计算；合并规划在折叠后的图上重新求 SCC，
+  引用被重写而来的环判为本次合并新增，整次合并拒绝写入。
+
+### 口径合并（`backend/src/services/merge_plan.py` + `merge_service.py`）
+
+业务在冲突抽屉里选定保留口径后，一次合并完成四件事，失败则整次不写：
+
+1. **归档**：被合并指标的每一版口径（DSL / 解析结果 / 签名 / 作者 / 时间）、依赖来源边（指标 / 字段 / 报表）、
+   报表引用与历史变更单快照写入 `metric_merges.archived`；指标行不删除，`status = merged`，
+   历史公式继续留在 `formulas`。
+2. **迁移引用**：其他指标 DSL 里的 `@旧口径` 改指保留口径并保存为新版本；同一指标同时引用保留与被合并口径时去重；
+   已合并口径再次被引用时按合并记录链式重定向。
+3. **迁移报表**：`reports.metric_codes` 把旧编码替换为保留口径并按 code 去重，`report_count` 与影响分不重复计。
+4. **旧路径补全**：引用图 = 当前 DSL 解析结果 ∪ 依赖边表（并重定向历史合并），即使上次校验后改过口径、
+   依赖边还停在旧状态，环检测也不会漏掉旧路径。
+
+合并失败（保留口径自引用 / 新依赖环 / 参数不合法）返回 409 `MERGE_BLOCKED`，`detail.conflict_paths`
+给出真实冲突路径，`metrics.status`、公式版本、报表引用、依赖边与审计全部保持原样。
+
+幂等：成功合并以 `merge_key = merge:<保留>:<排序后的被合并>` 为唯一自然键。重试同一合并直接返回原记录
+（`created=false`、`duplicate=true`、响应头 `X-Idempotent-Replay: 1`），不新增公式版本、依赖边、合并记录或审计，
+总览的报表数与影响分保持首次结果。审计动作：`metric.merge`。
 
 ## 6. 页面（6）
 
 | # | 路由 | 说明 |
 |---|---|---|
 | 1 | `#/login` | 登录：卡片柜抽屉 + 索书单表单 |
-| 2 | `#/overview` | 总览：指标 / 报表 / 同名冲突 / 依赖环 / 高风险 / 待审批，按等级与类型的条形、环路径、最近运行、7 天趋势 |
+| 2 | `#/overview` | 总览：指标（生效 / 已合并）/ 报表 / 同名冲突（含合并次数）/ 依赖环 / 高风险 / 待审批，按等级与类型的条形、环路径、最近运行、7 天趋势 |
 | 3 | `#/metrics` | 指标注册：筛选 + 目录列表 + 详情抽屉（DSL 编辑、算法 A 解析预览、保存新版本、注册新指标） |
 | 4 | `#/graph` | 依赖图：节点/边统计、SCC 环路径卡、节点表 + 展开抽屉、依赖边清单（可按边类型筛选） |
-| 5 | `#/conflicts` | 冲突与影响面：严重度/类型筛选、两份口径并排对照、差异明细、影响面、一键提交变更单 |
+| 5 | `#/conflicts` | 冲突与影响面：严重度/类型筛选、两份口径并排对照、差异明细、影响面、一键提交变更单、选定保留口径后预览并执行合并、合并归档（含版本与依赖来源） |
 | 6 | `#/changes` | 变更单与导出：跑校验、变更单列表 + 审批抽屉、4 张 CSV 导出、审计尾迹（admin） |
 
 共享组件（`site/js/ui.js`）：`table` / `drawer` / `filterBar` 同时被指标注册、依赖图、冲突、变更单四页复用。
@@ -95,6 +119,7 @@ UNBALANCED_PAREN / SELF_REFERENCE / NO_FIELD`。
 |---|---|---|---|
 | 业务域 `trade/traffic/member/goods/finance` | `constants/enums.py::MetricDomain` | `js/config.js::ENUMS.metricDomain` | 指标注册页筛选/表单、总览域名分布、导出 |
 | 分级 `core/normal` | `MetricTier` | `ENUMS.metricTier` | 指标表徽标、详情、导出 |
+| 指标状态 `draft/active/deprecated/merged` | `MetricStatus` | `ENUMS.metricStatus` | 指标筛选、合并后旧口径详情（只读 + 指向保留口径）、导出 |
 | 解析状态 `ok/error` | `ParseStatus` | `ENUMS.parseStatus` | 指标表/抽屉、依赖图节点、导出 |
 | 依赖边类型 `metric/field/report` | `DependencyKind` | `ENUMS.dependencyKind` | 依赖边清单筛选、导出 |
 | 冲突类型 `filter/field/agg/dep_diff` | `ConflictKind` | `ENUMS.conflictKind` | 冲突页筛选、总览差异类型、导出 |
@@ -133,6 +158,7 @@ open http://localhost:18206
 
 ```bash
 docker compose exec -T backend python -m scripts.seed_demo
+docker compose exec -T backend python -m scripts.merge_smoke   # 合并流程自检（不碰项目库）
 docker compose exec -T backend python -m pytest tests -q
 ```
 
@@ -163,7 +189,9 @@ backend/
   src/{config,constants,controllers,middlewares,models,routes,schemas,services,utils}
     services/dsl_parser.py        # 算法 A
     services/graph_analysis.py    # 算法 B
-  scripts/{seed_demo.py,demo_config.py,worker_healthcheck.sh}
+    services/merge_plan.py        # 合并规划（折叠图重算 SCC + 引用迁移）
+    services/merge_service.py     # 合并归档 / 报表与引用迁移 / 幂等
+  scripts/{seed_demo.py,demo_config.py,merge_smoke.py,worker_healthcheck.sh}
   migrations/  tests/
 frontend/site/{index.html,css/{tokens,app}.css,js/{config,api,store,ui,app}.js,js/pages/*.js}
 docker-compose.yml  .env  .env.example  README.md
